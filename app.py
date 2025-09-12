@@ -27,8 +27,8 @@ ENV = st.secrets["ENV"]
 # Authentication form in sidebar
 st.sidebar.markdown("---")
 st.sidebar.subheader("Authentication")
-username_input = st.sidebar.text_input("Username", value=USERNAME)
-password_input = st.sidebar.text_input("Password", value=PASSWORD, type="password")
+username_input = st.sidebar.text_input("Username", value="")
+password_input = st.sidebar.text_input("Password", value="", type="password")
 
 app_selection = st.sidebar.selectbox(
     "Select Tool",
