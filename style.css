@@ -1,0 +1,29 @@
+
+.main {
+    background-color: white;
+}
+.stApp {
+    background-color: white;
+}
+.sidebar .sidebar-content {
+    background-color: #EBF0FE;
+}
+.stButton > button {
+    background-color: #EBF0FE;
+    color: rgb(0, 0, 0);
+    border: none;
+}
+.stButton > button:hover {
+    background-color: #bdc5dc;
+    color: white;
+}
+.metric-card {
+    background-color: #EBF0FE;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border-left: 4px solid #EBF0FE;
+}
+.dashdoc-title {
+    color: #EBF0FE;
+    font-weight: bold;
+}
