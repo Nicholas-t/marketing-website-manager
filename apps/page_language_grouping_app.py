@@ -403,7 +403,7 @@ def by_group_view(stories, analytics):
             show_draft_only = st.checkbox("Show only those with draft", value=False)
         
         with col2:
-            show_group_id = st.checkbox("Show only groups with group_id", value=False)
+            show_group_id = st.checkbox("Show group_id in table", value=False)
             show_anayltics_on_each_locale = st.checkbox("Show analytics on each locale", value=False)
         
         with col3:
