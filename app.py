@@ -1,6 +1,7 @@
 import streamlit as st
 from apps.page_language_grouping_app import page_language_grouping_app
 import os
+from utils.storyblok import fetch_all_stories, fetch_all_stories_cdn
 
 if os.path.exists('style.css'):
     with open('style.css', 'r') as f:
@@ -32,14 +33,14 @@ password_input = st.sidebar.text_input("Password", value="", type="password")
 
 app_selection = st.sidebar.selectbox(
     "Select Tool",
-    ["Page Language Grouping", "Content Management", "Analytics Dashboard", "SEO Tools"]
+    ["Page Language Grouping"]
 )
 
 # Main app router
 def main():
     if app_selection == "Page Language Grouping":
-        page_language_grouping_app(dev_mode=DEV_MODE)
-
+        stories = fetch_all_stories(test=DEV_MODE)
+        page_language_grouping_app(stories, dev_mode=DEV_MODE)
 if __name__ == "__main__":
     if ENV == "dev":
         main()

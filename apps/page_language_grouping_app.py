@@ -1,6 +1,6 @@
 import pandas as pd
 import streamlit as st
-from utils.storyblok import fetch_all_stories, group_pages
+from utils.storyblok import group_pages
 
 LOCALE_TO_ICON={
     "en": "🇬🇧",
@@ -523,14 +523,11 @@ def by_page_view(stories):
     else:
         st.warning("🔍 No pages found in your stories.")
 
-
-def page_language_grouping_app(dev_mode=False):
+def page_language_grouping_app(stories, dev_mode=False):
     """Page Language Grouping Tool"""
     st.header("🌍 Page Language Grouping")
     st.markdown("View and manage pages grouped by language across different locales")
     
-    # Fetch all stories
-    stories = fetch_all_stories(test=dev_mode)
     if not stories:
         st.warning("⚠️ No stories found or error occurred while fetching.")
         return

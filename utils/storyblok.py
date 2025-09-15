@@ -4,12 +4,14 @@ import uuid
 # Get API key from secrets
 try:
     api_key = st.secrets["STORYBLOK_API_KEY"]
+    cdn_api_key = st.secrets["STORYBLOK_CDN_API_KEY"]
 except KeyError:
     st.error("❌ Storyblok API key not found in secrets. Please add it to .streamlit/secrets.toml")
     st.stop()
 
 # Storyblok API configuration
 STORYBLOK_API_BASE = "https://mapi.storyblok.com/v1/spaces/171339/stories/"
+STORYBLOK_API_BASE_CDN = "https://api.storyblok.com/v2/cdn/stories/"
 HEADERS = {
     "Authorization": api_key,
     "Content-Type": "application/json"
@@ -55,6 +57,35 @@ def fetch_all_stories(test=False):
                 st.error(f"❌ Error parsing response: {str(e)}")
                 return []
     
+    return all_stories
+
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def fetch_all_stories_cdn(test=False):
+    """Fetch all stories from Storyblok CDN"""
+    all_stories = []
+    page = 1
+    per_page = 100
+    with st.spinner("🔄 Loading stories from Storyblok CDN..."):
+        while True:
+            try:
+                params = {
+                    "per_page": per_page,
+                    "page": page,
+                    "token": cdn_api_key
+                }
+                response = requests.get(STORYBLOK_API_BASE_CDN, params=params, headers=HEADERS, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                stories = data.get("stories", [])
+                if not stories:
+                    break
+                all_stories.extend(stories)
+                page += 1
+                if page > 100 or test:
+                    break
+            except requests.exceptions.RequestException as e:
+                st.error(f"❌ Error fetching stories: {str(e)}")
+                return []
     return all_stories
 
 def change_page_group_id(page_id, group_id):
