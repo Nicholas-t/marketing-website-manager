@@ -1,7 +1,9 @@
 import streamlit as st
 from apps.page_language_grouping_app import page_language_grouping_app
 import os
-from utils.storyblok import fetch_all_stories, fetch_all_stories_cdn
+from utils.storyblok import fetch_all_stories
+from utils.plausible import get_page_visits_custom_date_range
+from datetime import datetime, timedelta
 
 if os.path.exists('style.css'):
     with open('style.css', 'r') as f:
@@ -38,9 +40,14 @@ app_selection = st.sidebar.selectbox(
 
 # Main app router
 def main():
+    start_date, end_date = st.date_input("Select date range for analytics", value=(datetime.now() - timedelta(days=30), datetime.now()))
+    start_date = start_date.strftime("%Y-%m-%d")
+    end_date = end_date.strftime("%Y-%m-%d")
+    analytics = get_page_visits_custom_date_range(start_date=start_date, end_date=end_date)
+    
     if app_selection == "Page Language Grouping":
         stories = fetch_all_stories(test=DEV_MODE)
-        page_language_grouping_app(stories, dev_mode=DEV_MODE)
+        page_language_grouping_app(stories, analytics, dev_mode=DEV_MODE)
 if __name__ == "__main__":
     if ENV == "dev":
         main()
