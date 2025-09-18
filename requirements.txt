@@ -4,3 +4,4 @@ numpy==1.23.2
 requests==2.31.0
 setuptools>=65.5.0
 wheel
+openai==1.78.0

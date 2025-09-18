@@ -1,0 +1,507 @@
+import streamlit as st
+import os
+import tempfile
+import json
+import hashlib
+from openai import OpenAI
+
+# Initialize OpenAI client
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+# OpenAI Structured Output JSON Schema for sales data extraction
+SALES_DATA_SCHEMA = {
+    "name": "sales_notes_extraction",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "company_org_key_people": {
+                "type": "string",
+                "description": "Company organization and key people information"
+            },
+            "project_manager": {
+                "type": "string", 
+                "description": "Project manager details"
+            },
+            "decision_maker": {
+                "type": "string",
+                "description": "Decision maker information"
+            },
+            "warnings_disclaimers": {
+                "type": "string",
+                "description": "Any warnings or disclaimers about behavior or organization"
+            },
+            "current_tms": {
+                "type": "string",
+                "description": "Current TMS (Transport Management System)"
+            },
+            "start_date_constraints": {
+                "type": "string",
+                "description": "Start date of the project and any constraints or conditions"
+            },
+            "number_sites_entities": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Number of sites/entities"
+            },
+            "number_truckers": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "How many truckers"
+            },
+            "activities_transport_details": {
+                "type": "string",
+                "description": "Activities they do (not the business sector, exactly what they transport)"
+            },
+            "group_network_details": {
+                "type": "string",
+                "description": "Part of a group? Member of a pallet network? Local influencer and other network details"
+            },
+            "cross_dock_details": {
+                "type": "string",
+                "description": "Cross dock functionality? Edition d'étiquettes de suivi? Suivi des statuts à chaque passage à quai?"
+            }
+        },
+        "required": [
+            "company_org_key_people",
+            "project_manager", 
+            "decision_maker",
+            "warnings_disclaimers",
+            "current_tms",
+            "start_date_constraints",
+            "number_sites_entities",
+            "number_truckers",
+            "activities_transport_details",
+            "group_network_details",
+            "cross_dock_details"
+        ],
+        "additionalProperties": False
+    },
+    "strict": True
+}
+
+def transcribe_audio(audio_file):
+    """Transcribe audio using OpenAI Whisper API"""
+    try:
+        # Handle UploadedFile object from st.audio_input()
+        if hasattr(audio_file, 'read'):
+            # It's an UploadedFile object, read the bytes
+            audio_bytes = audio_file.read()
+            # Reset file pointer for potential reuse
+            audio_file.seek(0)
+        else:
+            # It's already bytes
+            audio_bytes = audio_file
+        
+        # Create a temporary file to store the audio
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+            tmp_file.write(audio_bytes)
+            tmp_file.flush()
+            
+            # Transcribe using OpenAI Whisper
+            with open(tmp_file.name, "rb") as audio_file_handle:
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file_handle
+                )
+            
+            # Clean up temporary file
+            os.unlink(tmp_file.name)
+            return transcript.text
+    except Exception as e:
+        st.error(f"Error transcribing audio: {str(e)}")
+        return None
+
+def get_ai_response(messages):
+    """Get response from OpenAI GPT model"""
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-2024-08-06",
+            messages=messages,
+            max_completion_tokens=500,
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        st.error(f"Error getting AI response: {str(e)}")
+        return None
+
+def extract_structured_data(transcript):
+    """Extract structured sales data from transcript using OpenAI Structured Outputs"""
+    try:
+        messages = [
+            {
+                "role": "system", 
+                "content": "You are an expert sales assistant that extracts structured information from sales conversations and notes. Extract all relevant information from the transcript and organize it according to the provided schema. If information is not available for a field, leave it empty or indicate 'Not mentioned'."
+            },
+            {
+                "role": "user", 
+                "content": f"Please extract structured sales information from the following transcript:\n\n{transcript}"
+            }
+        ]
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-2024-08-06",  # Using the model that supports structured outputs
+            messages=messages,
+            response_format={
+                "type": "json_schema",
+                "json_schema": SALES_DATA_SCHEMA
+            }
+        )
+        
+        # Parse the JSON response
+        extracted_data = json.loads(response.choices[0].message.content)
+        return extracted_data
+            
+    except Exception as e:
+        st.error(f"Error extracting structured data: {str(e)}")
+        return None
+
+
+# Helper function to check if field is empty or contains placeholder text
+def is_field_empty(value):
+    if value is None:
+        return True
+    if isinstance(value, str):
+        if not value or not value.strip():
+            return True
+        # Check for common empty indicators
+        empty_indicators = ['not mentioned', 'n/a', 'none', '', 'not available', 'not provided']
+        return value.strip().lower() in empty_indicators
+    if isinstance(value, (int, float)):
+        return value < 0  # Negative numbers considered invalid
+    return False
+
+
+def merge_structured_data(existing_data, new_data):
+    """Merge new structured data with existing data, updating only non-empty fields"""
+    if not existing_data:
+        return new_data
+    
+    merged_data = existing_data.copy()
+    
+    def is_empty_value(value):
+        """Check if a value is considered empty"""
+        if value is None:
+            return True
+        if isinstance(value, str):
+            return not value.strip() or value.strip().lower() in ['not mentioned', 'n/a', 'none', '']
+        if isinstance(value, (int, float)):
+            return value < 0  # Negative numbers considered invalid
+        return False
+    
+    for key, value in new_data.items():
+        # Update field if new value is not empty
+        if not is_empty_value(value):
+            merged_data[key] = value
+    
+    return merged_data
+
+def generate_summary(transcript):
+    """Generate a concise summary of the transcribed audio"""
+    try:
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant that creates concise, professional summaries of conversations or notes. Focus on key points, action items, and important details."},
+            {"role": "user", "content": f"Please provide a concise summary of the following transcript:\n\n{transcript}"}
+        ]
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-2024-08-06",  # Using consistent model with structured outputs support
+            messages=messages,
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        st.error(f"Error generating summary: {str(e)}")
+        return None
+
+
+def clear_all_data():
+    """Clear all accumulated data from session state"""
+    keys_to_clear = [
+        'accumulated_transcripts',
+        'last_transcript', 
+        'accumulated_summary',
+        'accumulated_structured_data',
+        'last_processed_audio_hash'
+    ]
+    
+    for key in keys_to_clear:
+        if key in st.session_state:
+            del st.session_state[key]
+    
+    st.success("All data cleared! You can start fresh.")
+    st.rerun()
+
+
+def render_app_header(hubspot_id=None):
+    """Render the application header and HubSpot ID input"""
+    col1, col2 = st.columns([6, 1])
+    
+    with col1:
+        st.header("📝 Post Sales Notes - Audio Summary")
+        st.markdown("Record audio notes and get an AI-generated summary automatically")
+    
+    with col2:
+        hubspot_id_value = hubspot_id if hubspot_id else ""
+        hubspot_id_input = st.text_input("Company Hubspot ID", value=hubspot_id_value, disabled=False)
+        
+        if hubspot_id:
+            st.success(f"✅ HubSpot ID loaded from URL: {hubspot_id}")
+        
+        if hubspot_id_input:
+            st.session_state.hubspot_company_id = hubspot_id_input
+    
+    return hubspot_id_input
+
+
+def render_instructions():
+    """Render the instructions expander"""
+    with st.expander("📋 How to Use", expanded=False):
+        st.markdown("""
+        1. **Voice Recording**: Click the microphone button and record your notes or conversation
+        2. **Auto-Processing**: Audio is automatically processed when you finish recording - no button needed!
+        3. **Add More Notes**: Record additional audio to add more information - data will be merged automatically
+        4. **Edit Fields**: You can manually edit any field in the form below
+        5. **Update Fields**: New voice notes will update existing fields with the most recent information
+        6. **Start Over**: Click "Start Over" to clear all accumulated data and begin fresh
+        7. **Review Data**: The form shows all accumulated structured data and summaries
+        """)
+
+
+def process_audio_input(audio_bytes):
+    """Process audio input and update session state with results"""
+    if not audio_bytes:
+        return
+    
+    current_audio_hash = hashlib.md5(audio_bytes.getvalue()).hexdigest()
+    audio_already_processed = st.session_state.get('last_processed_audio_hash') == current_audio_hash
+    
+    if audio_already_processed:
+        st.info("✅ This audio has already been processed. Record new audio to add more information.")
+        return
+    
+    with st.spinner("🔈 Auto-processing audio..."):
+        # Transcribe audio
+        with st.spinner("✍️ Transcribing audio..."):
+            transcript = transcribe_audio(audio_bytes)
+            if not transcript:
+                st.error("❌ Failed to transcribe audio")
+                return
+        
+        # Store the hash of processed audio to prevent double processing
+        st.session_state.last_processed_audio_hash = current_audio_hash
+        
+        # Accumulate transcripts
+        if hasattr(st.session_state, 'accumulated_transcripts'):
+            st.session_state.accumulated_transcripts.append(transcript)
+        else:
+            st.session_state.accumulated_transcripts = [transcript]
+        
+        # Store the latest transcript for display
+        st.session_state.last_transcript = transcript
+        
+        # Generate and accumulate summary
+        with st.spinner("💬 Generating summary..."):
+            summary = generate_summary(transcript)
+            if summary:
+                if hasattr(st.session_state, 'accumulated_summary') and st.session_state.accumulated_summary:
+                    st.session_state.accumulated_summary += f"\n\n--- Additional Notes ---\n{summary}"
+                else:
+                    st.session_state.accumulated_summary = summary
+        
+        # Extract and merge structured data
+        with st.spinner("🔍 Extracting data..."):
+            new_structured_data = extract_structured_data(transcript)
+            if new_structured_data:
+                existing_data = st.session_state.get('accumulated_structured_data', {})
+                st.session_state.accumulated_structured_data = merge_structured_data(existing_data, new_structured_data)
+                st.success("✅ Audio automatically processed, summary updated!")
+            else:
+                st.error("❌ Failed to extract structured data")
+
+
+def render_audio_input_section():
+    """Render the audio input and processing section"""
+    st.subheader("🎤 Record Notes")
+    
+    # Audio recorder widget
+    audio_bytes = st.audio_input("Record your notes or conversation")
+    
+    # Start Over button
+    if st.button("🔄 Start Over", help="Clear all accumulated notes, summaries, and structured data"):
+        clear_all_data()
+    
+    # Process audio if provided
+    process_audio_input(audio_bytes)
+
+
+def create_field_input(label, key, col_obj, structured_data):
+    """Create input field with warning styling for empty fields"""
+    value = structured_data.get(key, '')
+    is_empty = is_field_empty(value)
+    
+    # Format value based on type for display and editing
+    def format_value_for_input(val):
+        if val is None:
+            return ""
+        elif isinstance(val, (int, float)):
+            return str(val) if val >= 0 else ""
+        else:
+            return str(val) if val and val.lower() not in ['not mentioned', 'n/a', 'none', 'not specified'] else ""
+    
+    input_value = format_value_for_input(value)
+    
+    # Create the input field
+    if key in ['number_sites_entities', 'number_truckers']:
+        # Handle integer fields
+        new_value = col_obj.number_input(
+            label if not is_empty else f"⚠️ {label}",
+            value=int(input_value) if input_value and input_value.isdigit() else 0,
+            min_value=0,
+            key=f"field_{key}",
+            help="Enter a number"
+        )
+        # Update session state if value changed
+        if new_value != value:
+            if 'accumulated_structured_data' not in st.session_state:
+                st.session_state.accumulated_structured_data = {}
+            st.session_state.accumulated_structured_data[key] = new_value
+    else:
+        # Handle text fields
+        new_value = col_obj.text_area(
+            label if not is_empty else f"⚠️ {label}",
+            value=input_value,
+            height=100,
+            key=f"field_{key}",
+            help="You can edit this field manually"
+        )
+        # Update session state if value changed
+        if new_value != input_value:
+            if 'accumulated_structured_data' not in st.session_state:
+                st.session_state.accumulated_structured_data = {}
+            st.session_state.accumulated_structured_data[key] = new_value
+
+
+def render_data_completion_status(structured_data):
+    """Render data completion status and progress"""
+    if not structured_data:
+        return
+    
+    total_fields = len(structured_data)
+    empty_fields = sum(1 for value in structured_data.values() if is_field_empty(value))
+    filled_fields = total_fields - empty_fields
+    completion_percentage = (filled_fields / total_fields) * 100 if total_fields > 0 else 0
+    
+    st.info(f"📊 Data Completion: {filled_fields}/{total_fields} fields ({completion_percentage:.0f}%)")
+
+
+def render_structured_data_form(structured_data, dev_mode=False):
+    """Render the structured data form organized by categories"""
+    with st.expander("View accumulated structured data", expanded=True):
+        # Organization section
+        st.markdown("### 👥 ORG")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            create_field_input("Company Org & Key People", 'company_org_key_people', col1, structured_data)
+            create_field_input("Project Manager", 'project_manager', col1, structured_data)
+        
+        with col2:
+            create_field_input("Decision Maker", 'decision_maker', col2, structured_data)
+            create_field_input("Warnings/Disclaimers", 'warnings_disclaimers', col2, structured_data)
+        
+        # Stack section
+        st.markdown("### ⚙️ STACK")
+        create_field_input("Current TMS", 'current_tms', st, structured_data)
+        
+        # Project size/complexity section
+        st.markdown("### 📏 PROJECT SIZE / COMPLEXITY")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            create_field_input("Start Date & Constraints", 'start_date_constraints', col1, structured_data)
+            create_field_input("Number of Sites/Entities", 'number_sites_entities', col1, structured_data)
+        
+        with col2:
+            create_field_input("Number of Truckers", 'number_truckers', col2, structured_data)
+            create_field_input("Activities/Transport Details", 'activities_transport_details', col2, structured_data)
+        
+        # LTL section
+        st.markdown("### 📦 LTL")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            create_field_input("Group/Network Details", 'group_network_details', col1, structured_data)
+        
+        with col2:
+            create_field_input("Cross Dock Details", 'cross_dock_details', col2, structured_data)
+        
+        if dev_mode:
+            # Show raw JSON data
+            with st.expander("Raw JSON Data", expanded=False):
+                st.json(structured_data)
+
+
+def render_sales_notes_data_tab(dev_mode=False):
+    """Render the sales notes data tab"""
+    st.subheader("📝 Sales Notes Data")
+    
+    structured_data = st.session_state.get('accumulated_structured_data', {})
+    
+    if structured_data:
+        render_data_completion_status(structured_data)
+        render_structured_data_form(structured_data, dev_mode)
+
+
+def render_transcript_summary_tab():
+    """Render the transcript and summary tab"""
+    # Display all accumulated transcripts
+    if hasattr(st.session_state, 'accumulated_transcripts') and st.session_state.accumulated_transcripts:
+        if len(st.session_state.accumulated_transcripts) > 1:
+            with st.expander("View all transcripts", expanded=False):
+                for i, transcript in enumerate(st.session_state.accumulated_transcripts, 1):
+                    st.text_area(f"Transcript {i}:", value=transcript, height=100, disabled=True, key=f"transcript_{i}")
+    
+    # Summary text input section
+    st.subheader("📋 Accumulated Summary")
+    summary_value = st.session_state.get('accumulated_summary', '')
+    new_summary = st.text_area(
+        "Edit or review the accumulated summary:",
+        value=summary_value,
+        height=200,
+        placeholder="The AI-generated summary will appear here after processing audio...",
+        key="summary_editor",
+        help="You can edit this summary manually"
+    )
+    
+    # Update session state if summary changed
+    if new_summary != summary_value:
+        st.session_state.accumulated_summary = new_summary
+
+
+def render_data_display_tabs(dev_mode=False):
+    """Render the data display tabs (Sales Notes Data and Transcript & Summary)"""
+    sales_notes_data_tab, transcript_summary_tab = st.tabs(["📝 Sales Notes Data", "📄 Transcript & Summary"])
+    
+    with sales_notes_data_tab:
+        render_sales_notes_data_tab(dev_mode)
+    
+    with transcript_summary_tab:
+        render_transcript_summary_tab()
+
+
+def post_sales_notes_app(dev_mode=False, hs_id=None):
+    """Main application function - orchestrates all components"""
+    # Render header and get HubSpot ID
+    render_app_header(hs_id)
+    
+    # Render instructions
+    render_instructions()
+    
+    # Main content layout
+    col3, col4 = st.columns([1, 1])
+    
+    with col3:
+        render_audio_input_section()
+    
+    with col4:
+        render_data_display_tabs(dev_mode)
+       
