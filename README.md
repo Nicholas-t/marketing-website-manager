@@ -1,15 +1,22 @@
-# Storyblok Stories Manager
+# Marketing Website Manager
 
-A simple Streamlit app that lists all stories from your Storyblok space.
+A collection of internal tools built with Streamlit to help manage marketing operations and sales processes.
 
-## Features
+## Available Tools
 
+### 1. Storyblok Stories Manager
 - 📚 View all stories from your Storyblok space
 - 🔍 Search stories by name, slug, or content
 - 🏷️ Filter by content type
 - 📊 Show published vs draft status
 - ⚡ Cached data for better performance
 - 📱 Responsive design
+
+### 2. Sales Post Meeting Notes
+- 📝 Generate post-meeting notes and follow-up actions
+- 🔗 Integrates with HubSpot for company data
+- 📋 Structured note templates
+- 🚀 Direct URL access with HubSpot ID parameter
 
 ## Setup
 
@@ -58,7 +65,9 @@ This will:
 - Pre-fill the HubSpot Company ID field with the provided value
 - Show confirmation that the ID was loaded from the URL
 
-### Marketing Tool Usage
+### Tool-Specific Usage
+
+#### Storyblok Stories Manager
 1. The app will automatically load all stories from your Storyblok space
 2. Use the sidebar filters to narrow down results
 3. Use the search box to find specific stories
@@ -68,6 +77,12 @@ This will:
    - Publication status
    - Creation and update dates
    - Content type
+
+#### Sales Post Meeting Notes
+1. Enter a HubSpot Company ID to load company information
+2. Fill in meeting details and attendees
+3. Generate structured notes and follow-up actions
+4. Copy the generated content for use in your CRM or documentation
 
 ## Notes
 
