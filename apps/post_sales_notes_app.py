@@ -79,6 +79,23 @@ SALES_DATA_SCHEMA = {
     "strict": True
 }
 
+SYSTEM_PROMPT = """
+You are an expert sales assistant that extracts structured information from sales conversations and notes.
+Your task is to analyze the transcript and fill in the fields of the schema with the most relevant information.
+
+Instructions:
+
+Output only the value for each field (no extra phrasing like “The X is…”).
+
+If multiple values apply, list them separated by commas.
+
+If information is missing, leave the field empty.
+
+Do not add explanations, assumptions, or commentary outside the schema.
+
+Maintain the exact field names from the schema.
+"""
+
 def transcribe_audio(audio_file):
     """Transcribe audio using OpenAI Whisper API"""
     try:
@@ -130,7 +147,7 @@ def extract_structured_data(transcript):
         messages = [
             {
                 "role": "system", 
-                "content": "You are an expert sales assistant that extracts structured information from sales conversations and notes. Extract all relevant information from the transcript and organize it according to the provided schema. If information is not available for a field, leave it empty or indicate 'Not mentioned'."
+                "content": SYSTEM_PROMPT.strip()
             },
             {
                 "role": "user", 
@@ -227,6 +244,26 @@ def clear_all_data():
         if key in st.session_state:
             del st.session_state[key]
     
+    # Also clear any field-specific keys that might have been created
+    field_keys = [
+        'field_company_org_key_people',
+        'field_project_manager',
+        'field_decision_maker', 
+        'field_warnings_disclaimers',
+        'field_current_tms',
+        'field_start_date_constraints',
+        'field_number_sites_entities',
+        'field_number_truckers',
+        'field_activities_transport_details',
+        'field_group_network_details',
+        'field_cross_dock_details',
+        'summary_editor'
+    ]
+    
+    for key in field_keys:
+        if key in st.session_state:
+            del st.session_state[key]
+    
     st.success("All data cleared! You can start fresh.")
     st.rerun()
 
@@ -245,7 +282,8 @@ def render_app_header(hubspot_id=None):
         
         if hubspot_id:
             st.success(f"✅ HubSpot ID loaded from URL: {hubspot_id}")
-        
+        else:
+            st.warning("No company HubSpot ID provided")
         if hubspot_id_input:
             st.session_state.hubspot_company_id = hubspot_id_input
     
@@ -322,12 +360,13 @@ def render_audio_input_section():
     """Render the audio input and processing section"""
     st.subheader("🎤 Record Notes")
     
+    # Start Over button - placed before audio input to prevent conflicts
+    if st.button("🔄 Start Over", help="Clear all accumulated notes, summaries, and structured data", type="secondary"):
+        clear_all_data()
+        return  # Early return to prevent audio processing after clearing data
+    
     # Audio recorder widget
     audio_bytes = st.audio_input("Record your notes or conversation")
-    
-    # Start Over button
-    if st.button("🔄 Start Over", help="Clear all accumulated notes, summaries, and structured data"):
-        clear_all_data()
     
     # Process audio if provided
     process_audio_input(audio_bytes)
