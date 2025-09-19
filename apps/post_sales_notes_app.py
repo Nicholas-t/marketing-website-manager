@@ -322,7 +322,7 @@ def render_app_header(hubspot_id=None):
                             st.error(f"❌ Error sending company data to HubSpot: {str(e)}")
             with col22:
                 company_data = get_hubspot_company_data(hubspot_id_input)
-                company_name = company_data.get('properties').get('name').get('value')
+                company_name = company_data.get('properties', {}).get('name', {}).get('value')
                 st.success(f"🏢 {company_name}")
                 st.session_state.hubspot_company_id = hubspot_id_input
                 st.session_state.hubspot_company_name = company_name

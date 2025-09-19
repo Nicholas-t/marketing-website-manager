@@ -5,12 +5,14 @@ import uuid
 try:
     api_key = st.secrets["STORYBLOK_API_KEY"]
     cdn_api_key = st.secrets["STORYBLOK_CDN_API_KEY"]
+    STORYBLOK_SPACE_ID = st.secrets["STORYBLOK_SPACE_ID"]
 except KeyError:
     st.error("❌ Storyblok API key not found in secrets. Please add it to .streamlit/secrets.toml")
     st.stop()
 
+
 # Storyblok API configuration
-STORYBLOK_API_BASE = "https://mapi.storyblok.com/v1/spaces/171339/stories/"
+STORYBLOK_API_BASE = f"https://mapi.storyblok.com/v1/spaces/{STORYBLOK_SPACE_ID}/stories/"
 STORYBLOK_API_BASE_CDN = "https://api.storyblok.com/v2/cdn/stories/"
 HEADERS = {
     "Authorization": api_key,
