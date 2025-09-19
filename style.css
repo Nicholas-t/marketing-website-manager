@@ -27,3 +27,40 @@
     color: #EBF0FE;
     font-weight: bold;
 }
+
+button[data-testid='stAudioInputActionButton'] {
+    color:rgb(255, 75, 75);
+    border-radius: 50%;
+    border: 1px solid rgb(255, 75, 75);
+    font-size: 1rem;
+    padding: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background-color: white;
+}
+
+/* Field completion status styling */
+.field-status-completed {
+    background-color: #d4edda !important;
+    border-left: 4px solid #28a745 !important;
+    padding: 0.5rem !important;
+    margin: 0.25rem 0 !important;
+    border-radius: 0.25rem !important;
+}
+
+.field-status-missing {
+    background-color: #f8d7da !important;
+    border-left: 4px solid #dc3545 !important;
+    padding: 0.5rem !important;
+    margin: 0.25rem 0 !important;
+    border-radius: 0.25rem !important;
+}
+
+.progress-container {
+    background-color: #f8f9fa !important;
+    padding: 1rem !important;
+    border-radius: 0.5rem !important;
+    margin-bottom: 1rem !important;
+    border: 1px solid #dee2e6 !important;
+}

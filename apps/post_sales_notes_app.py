@@ -4,9 +4,11 @@ import tempfile
 import json
 import hashlib
 from openai import OpenAI
-
+from utils.hubspot import get_hubspot_company_data, send_company_data_to_hubspot
 # Initialize OpenAI client
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+
 
 # OpenAI Structured Output JSON Schema for sales data extraction
 SALES_DATA_SCHEMA = {
@@ -77,6 +79,34 @@ SALES_DATA_SCHEMA = {
         "additionalProperties": False
     },
     "strict": True
+}
+
+FIELD_NAME_MAPPING = {
+    "company_org_key_people": "Company Org & Key People",
+    "project_manager": "Project Manager",
+    "decision_maker": "Decision Maker",
+    "warnings_disclaimers": "Warnings/Disclaimers",
+    "current_tms": "Current TMS",
+    "start_date_constraints": "Start Date & Constraints",
+    "number_sites_entities": "Number of Sites/Entities",
+    "number_truckers": "Number of Truckers",
+    "activities_transport_details": "Activities/Transport Details",
+    "group_network_details": "Group/Network Details",
+    "cross_dock_details": "Cross Dock Details"
+}
+
+SALES_DATA_SCHEMA_TO_HUBSPOT_FIELDS_MAPPING = {
+    "company_org_key_people": "company_org_key_people",
+    "project_manager": "project_manager",
+    "decision_maker": "decision_maker",
+    "warnings_disclaimers": "warnings_disclaimers",
+    "current_tms": "current_tms",
+    "start_date_constraints": "start_date_constraints",
+    "number_sites_entities": "number_sites_entities",
+    "number_truckers": "number_truckers",
+    "activities_transport_details": "activities_transport_details",
+    "group_network_details": "group_network_details",
+    "cross_dock_details": "cross_dock_details"
 }
 
 SYSTEM_PROMPT = """
@@ -172,19 +202,14 @@ def extract_structured_data(transcript):
         st.error(f"Error extracting structured data: {str(e)}")
         return None
 
-
 # Helper function to check if field is empty or contains placeholder text
 def is_field_empty(value):
     if value is None:
         return True
     if isinstance(value, str):
-        if not value or not value.strip():
-            return True
-        # Check for common empty indicators
-        empty_indicators = ['not mentioned', 'n/a', 'none', '', 'not available', 'not provided']
-        return value.strip().lower() in empty_indicators
+        return not value or not value.strip()
     if isinstance(value, (int, float)):
-        return value < 0  # Negative numbers considered invalid
+        return value <= 0  # Negative numbers considered invalid
     return False
 
 
@@ -244,11 +269,10 @@ def clear_all_data():
         if key in st.session_state:
             del st.session_state[key]
     
-    # Also clear any field-specific keys that might have been created
-    field_keys = [
+    field_keys_to_clear = [
         'field_company_org_key_people',
         'field_project_manager',
-        'field_decision_maker', 
+        'field_decision_maker',
         'field_warnings_disclaimers',
         'field_current_tms',
         'field_start_date_constraints',
@@ -256,11 +280,9 @@ def clear_all_data():
         'field_number_truckers',
         'field_activities_transport_details',
         'field_group_network_details',
-        'field_cross_dock_details',
-        'summary_editor'
-    ]
-    
-    for key in field_keys:
+        'field_cross_dock_details'
+    ]   
+    for key in field_keys_to_clear:
         if key in st.session_state:
             del st.session_state[key]
     
@@ -270,7 +292,7 @@ def clear_all_data():
 
 def render_app_header(hubspot_id=None):
     """Render the application header and HubSpot ID input"""
-    col1, col2 = st.columns([6, 1])
+    col1, col2 = st.columns([5, 2])
     
     with col1:
         st.header("📝 Post Sales Notes - Audio Summary")
@@ -280,27 +302,62 @@ def render_app_header(hubspot_id=None):
         hubspot_id_value = hubspot_id if hubspot_id else ""
         hubspot_id_input = st.text_input("Company Hubspot ID", value=hubspot_id_value, disabled=False)
         
-        if hubspot_id:
-            st.success(f"✅ HubSpot ID loaded from URL: {hubspot_id}")
+        if hubspot_id_input:
+            col21, col22 = st.columns([1, 1])
+            with col21:
+                st.markdown(f"[View in HubSpot](https://app.hubspot.com/contacts/9184177/record/0-2/{hubspot_id_input})")
+                if st.session_state.get("accumulated_structured_data"):
+                    if st.button("Save notes to HubSpot"):
+                        print("Sending company data to HubSpot")
+                        print(st.session_state.hubspot_company_id)
+                        print(st.session_state.accumulated_structured_data)
+                        data_to_send = {}
+                        for key, value in st.session_state.accumulated_structured_data.items():
+                            data_to_send[SALES_DATA_SCHEMA_TO_HUBSPOT_FIELDS_MAPPING[key]] = value
+                        try:
+                            # Send company data to HubSpot
+                            # send_company_data_to_hubspot(st.session_state.hubspot_company_id, data_to_send)
+                            st.success("✅ Company data sent to HubSpot")
+                        except Exception as e:
+                            st.error(f"❌ Error sending company data to HubSpot: {str(e)}")
+            with col22:
+                company_data = get_hubspot_company_data(hubspot_id_input)
+                company_name = company_data.get('properties').get('name').get('value')
+                st.success(f"🏢 {company_name}")
+                st.session_state.hubspot_company_id = hubspot_id_input
+                st.session_state.hubspot_company_name = company_name
         else:
             st.warning("No company HubSpot ID provided")
-        if hubspot_id_input:
-            st.session_state.hubspot_company_id = hubspot_id_input
     
     return hubspot_id_input
 
 
 def render_instructions():
     """Render the instructions expander"""
-    with st.expander("📋 How to Use", expanded=False):
+    with st.expander("🎙️ How to Use Voice Notes", expanded=False):
         st.markdown("""
-        1. **Voice Recording**: Click the microphone button and record your notes or conversation
-        2. **Auto-Processing**: Audio is automatically processed when you finish recording - no button needed!
-        3. **Add More Notes**: Record additional audio to add more information - data will be merged automatically
-        4. **Edit Fields**: You can manually edit any field in the form below
-        5. **Update Fields**: New voice notes will update existing fields with the most recent information
-        6. **Start Over**: Click "Start Over" to clear all accumulated data and begin fresh
-        7. **Review Data**: The form shows all accumulated structured data and summaries
+        ### Simple 3-Step Process:
+        
+        **1. 🎤 Record Your Voice**
+        - Click the microphone button and speak naturally about your customer call or meeting
+        - Talk about what was discussed, customer needs, next steps, etc.
+        - Click stop when you're done
+        
+        **2. ✏️ Review & Add More (Optional)**
+        - The form below will automatically fill with your notes
+        - Record more audio if you want to add additional information
+        - Edit any field manually if needed
+        
+        **3. 💾 Save to HubSpot**
+        - When you're happy with all the information, click "Save notes to HubSpot"
+        - Your notes will be automatically organized and saved to the customer's record
+        
+        ---
+        **💡 Tips:**
+        - Speak naturally - the system understands conversational language even in french
+        - You can record multiple times to add more details
+        - Each new recording will update and improve your notes
+        - Use "Start Over" if you want to begin fresh
         """)
 
 
@@ -420,16 +477,16 @@ def create_field_input(label, key, col_obj, structured_data):
 
 
 def render_data_completion_status(structured_data):
-    """Render data completion status and progress"""
+    """Render data completion status and progress - simplified version for forms"""
     if not structured_data:
         return
     
-    total_fields = len(structured_data)
-    empty_fields = sum(1 for value in structured_data.values() if is_field_empty(value))
-    filled_fields = total_fields - empty_fields
-    completion_percentage = (filled_fields / total_fields) * 100 if total_fields > 0 else 0
+    all_required_fields = SALES_DATA_SCHEMA.get("schema").get("properties").keys()
+    filled_count = sum(1 for field in all_required_fields if not is_field_empty(structured_data.get(field)))
+    total_fields = len(all_required_fields)
+    completion_percentage = (filled_count / total_fields) * 100 if total_fields > 0 else 0
     
-    st.info(f"📊 Data Completion: {filled_fields}/{total_fields} fields ({completion_percentage:.0f}%)")
+    st.info(f"📊 Data Completion: {filled_count}/{total_fields} fields ({completion_percentage:.0f}%)")
 
 
 def render_structured_data_form(structured_data, dev_mode=False):
@@ -489,6 +546,51 @@ def render_sales_notes_data_tab(dev_mode=False):
         render_data_completion_status(structured_data)
         render_structured_data_form(structured_data, dev_mode)
 
+def get_human_readable_field_name(field_key):
+    """Convert field keys to human-readable names"""
+    return FIELD_NAME_MAPPING.get(field_key, field_key.replace('_', ' ').title())
+
+def render_checklist_section():
+    """Render the checklist section with improved visual indicators"""
+    with st.expander("📋 Field Completion Status", expanded=True):
+        structured_data = st.session_state.get("accumulated_structured_data", {})
+        all_required_fields = SALES_DATA_SCHEMA.get("schema").get("properties").keys()
+        
+        # Calculate completion stats
+        filled_fields = []
+        empty_fields = []
+        
+        for field in all_required_fields:
+            field_value = structured_data.get(field)
+            human_name = get_human_readable_field_name(field)
+            
+            if is_field_empty(field_value):
+                empty_fields.append(human_name)
+            else:
+                filled_fields.append(human_name)
+        
+        total_fields = len(all_required_fields)
+        completion_percentage = (len(filled_fields) / total_fields) * 100 if total_fields > 0 else 0
+        
+        # Progress bar
+        st.progress(completion_percentage / 100, text=f"Completion: {len(filled_fields)}/{total_fields} fields ({completion_percentage:.0f}%)")
+        
+        # Show filled fields
+        if filled_fields:
+            st.markdown("#### ✅ **Completed Fields**")
+            for field_name in filled_fields:
+                st.success(f"✅ {field_name}")
+        
+        # Show empty fields
+        if empty_fields:
+            st.markdown("#### ⚠️ **Missing Fields**")
+            for field_name in empty_fields:
+                st.error(f"❌ {field_name}")
+        
+        # Show completion message when all done
+        if len(filled_fields) == total_fields:
+            st.balloons()
+            st.success("🎉 All fields completed! Ready to save to HubSpot.")
 
 def render_transcript_summary_tab():
     """Render the transcript and summary tab"""
@@ -540,7 +642,7 @@ def post_sales_notes_app(dev_mode=False, hs_id=None):
     
     with col3:
         render_audio_input_section()
-    
+        render_checklist_section()
     with col4:
         render_data_display_tabs(dev_mode)
        
