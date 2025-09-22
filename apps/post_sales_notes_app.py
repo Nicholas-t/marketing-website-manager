@@ -209,7 +209,7 @@ def is_field_empty(value):
     if isinstance(value, str):
         return not value or not value.strip()
     if isinstance(value, (int, float)):
-        return value <= 0  # Negative numbers considered invalid
+        return value <= 0  # Zero and negative numbers considered invalid for these fields
     return False
 
 
@@ -306,20 +306,6 @@ def render_app_header(hubspot_id=None):
             col21, col22 = st.columns([1, 1])
             with col21:
                 st.markdown(f"[View in HubSpot](https://app.hubspot.com/contacts/9184177/record/0-2/{hubspot_id_input})")
-                if st.session_state.get("accumulated_structured_data"):
-                    if st.button("Save notes to HubSpot"):
-                        print("Sending company data to HubSpot")
-                        print(st.session_state.hubspot_company_id)
-                        print(st.session_state.accumulated_structured_data)
-                        data_to_send = {}
-                        for key, value in st.session_state.accumulated_structured_data.items():
-                            data_to_send[SALES_DATA_SCHEMA_TO_HUBSPOT_FIELDS_MAPPING[key]] = value
-                        try:
-                            # Send company data to HubSpot
-                            # send_company_data_to_hubspot(st.session_state.hubspot_company_id, data_to_send)
-                            st.success("✅ Company data sent to HubSpot")
-                        except Exception as e:
-                            st.error(f"❌ Error sending company data to HubSpot: {str(e)}")
             with col22:
                 company_data = get_hubspot_company_data(hubspot_id_input)
                 company_name = company_data.get('properties', {}).get('name', {}).get('value')
@@ -448,9 +434,16 @@ def create_field_input(label, key, col_obj, structured_data):
     # Create the input field
     if key in ['number_sites_entities', 'number_truckers']:
         # Handle integer fields
+        # Handle the default value properly for integer fields
+        default_value = 0
+        if isinstance(value, (int, float)) and value > 0:
+            default_value = int(value)
+        elif input_value and input_value.isdigit():
+            default_value = int(input_value)
+        
         new_value = col_obj.number_input(
             label if not is_empty else f"⚠️ {label}",
-            value=int(input_value) if input_value and input_value.isdigit() else 0,
+            value=default_value,
             min_value=0,
             key=f"field_{key}",
             help="Enter a number"
@@ -534,6 +527,18 @@ def render_structured_data_form(structured_data, dev_mode=False):
             # Show raw JSON data
             with st.expander("Raw JSON Data", expanded=False):
                 st.json(structured_data)
+
+        if st.session_state.get("accumulated_structured_data"):
+            if st.button("Save notes to HubSpot"):
+                data_to_send = {}
+                for key, value in st.session_state.accumulated_structured_data.items():
+                    data_to_send[SALES_DATA_SCHEMA_TO_HUBSPOT_FIELDS_MAPPING[key]] = value
+                try:
+                    # Send company data to HubSpot
+                    # send_company_data_to_hubspot(st.session_state.hubspot_company_id, data_to_send)
+                    st.success("✅ Company data sent to HubSpot")
+                except Exception as e:
+                    st.error(f"❌ Error sending company data to HubSpot: {str(e)}")
 
 
 def render_sales_notes_data_tab(dev_mode=False):
