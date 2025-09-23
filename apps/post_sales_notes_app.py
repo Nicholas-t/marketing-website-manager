@@ -576,42 +576,42 @@ def render_structured_data_form(structured_data, dev_mode=False):
         st.markdown("#### Decision Maker")
         col1, col2 = st.columns(2)
         with col1:
-            create_field_input("First Name", 'decision_maker_firstname', col1, structured_data)
+            create_field_input(FIELD_NAME_MAPPING['decision_maker_firstname'], 'decision_maker_firstname', col1, structured_data)
         with col2:
-            create_field_input("Decision Maker Last Name", 'decision_maker_lastname', col2, structured_data)
+            create_field_input(FIELD_NAME_MAPPING['decision_maker_lastname'], 'decision_maker_lastname', col2, structured_data)
        
         st.markdown("#### Project Manager")
         col1, col2 = st.columns(2)
         with col1:
-            create_field_input("First Name", 'project_manager_firstname', col1, structured_data)
+            create_field_input(FIELD_NAME_MAPPING['project_manager_firstname'], 'project_manager_firstname', col1, structured_data)
         with col2:
-            create_field_input("Last Name", 'project_manager_lastname', col2, structured_data)
+            create_field_input(FIELD_NAME_MAPPING['project_manager_lastname'], 'project_manager_lastname', col2, structured_data)
         
         st.markdown("#### Company Org & Key People")
         col1, col2 = st.columns(2)
         with col1:
-            create_field_input("Company Org & Key People", 'company_org_key_people', col1, structured_data)
+            create_field_input(FIELD_NAME_MAPPING['company_org_key_people'], 'company_org_key_people', col1, structured_data)
         with col2:
-            create_field_input("Warnings/Disclaimers", 'warnings_disclaimers', col2, structured_data)
+            create_field_input(FIELD_NAME_MAPPING['warning_note'], 'warning_note', col2, structured_data)
         
        
         # Stack section
         st.markdown("### ⚙️ STACK")
-        create_field_input("Current TMS", 'current_tms', st, structured_data)
+        create_field_input(FIELD_NAME_MAPPING['current_tms'], 'current_tms', st, structured_data)
         
         # Project size/complexity section
         st.markdown("### 📏 PROJECT SIZE / CONTEXT")
         col1, col2 = st.columns(2)
         
         with col1:
-            create_field_input("Start Date & Constraints", 'start_date_constraints', col1, structured_data)
-            create_field_input("Number of Sites/Entities", 'number_sites_entities', col1, structured_data)
-            create_field_input("Group/Network Details", 'group_network_details', col1, structured_data)
+            create_field_input(FIELD_NAME_MAPPING['start_date_constraints'], 'start_date_constraints', col1, structured_data)
+            create_field_input(FIELD_NAME_MAPPING['number_sites_entities'], 'number_sites_entities', col1, structured_data)
+            create_field_input(FIELD_NAME_MAPPING['group_network_details'], 'group_network_details', col1, structured_data)
         
         with col2:
-            create_field_input("Number of Truckers", 'number_truckers', col2, structured_data)
-            create_field_input("Activities/Transport Details", 'activities_transport_details', col2, structured_data)
-            create_field_input("Cross Dock Details", 'cross_dock_details', col2, structured_data)
+            create_field_input(FIELD_NAME_MAPPING['number_truckers'], 'number_truckers', col2, structured_data)
+            create_field_input(FIELD_NAME_MAPPING['activities_transport_details'], 'activities_transport_details', col2, structured_data)
+            create_field_input(FIELD_NAME_MAPPING['cross_dock_details'], 'cross_dock_details', col2, structured_data)
         
         if dev_mode:
             # Show raw JSON data
