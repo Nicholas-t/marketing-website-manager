@@ -31,7 +31,7 @@ def send_company_data_to_hubspot(hubspot_id, data):
         payload = {"properties": _sanitize_data(data)}
         response = requests.patch(url, headers=headers, json=payload, timeout=30)
         
-        if response.status_code == 200:
+        if response.status_code >=200 and response.status_code < 300:
             return response.json()
         else:
             raise Exception(f"HubSpot API error: {response.status_code} - {response.text}")
@@ -50,7 +50,7 @@ def create_contact_in_hubspot(data):
         payload = {"properties": _sanitize_data(data)}
         response = requests.post(url, headers=headers, json=payload, timeout=30)
         
-        if response.status_code == 201:  # Created
+        if response.status_code >=200 and response.status_code < 300:
             return response.json()
         else:
             raise Exception(f"HubSpot API error: {response.status_code} - {response.text}")
@@ -74,7 +74,7 @@ def associate_contact_to_company(contact_id, company_id):
         ]
         response = requests.put(url, headers=headers, json=request_body, timeout=30)
         
-        if response.status_code == 200:
+        if response.status_code >=200 and response.status_code < 300:
             return response.json()
         else:
             raise Exception(f"HubSpot API error: {response.status_code} - {response.text}")
@@ -89,7 +89,7 @@ def get_tms_list_for_field():
     try:
         response = requests.get(url, headers=headers, timeout=30)
         
-        if response.status_code == 200:
+        if response.status_code >=200 and response.status_code < 300:
             data = response.json()
             if "options" in data and data["options"]:
                 return [option["value"] for option in data["options"]]

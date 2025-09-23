@@ -46,7 +46,7 @@ SALES_DATA_SCHEMA = {
                 "description": "Current Transport Management System in use. Include: system name, version, how long they've used it, satisfaction level, specific pain points, integration capabilities, data migration challenges, and why they're looking to change. This helps CS understand technical migration complexity and potential integration requirements.",
                 "enum": TMS_LIST,
             },
-            "start_date_constraints": {
+            "mrr_start_date": {
                 "type": "string",
                 "description": "Project timeline and implementation constraints. Include: desired start date, hard deadlines, seasonal business patterns, budget cycles, regulatory compliance dates, contract renewals, or any time-sensitive factors. Note if there are flexibility windows or if dates are negotiable. This helps CS plan realistic implementation schedules. THE FORMAT MUST BE DD/MM/YYYY",
                 "pattern": "^(0[1-9]|[12][0-9]|3[01])/(0[1-9]|1[0-2])/\\d{4}$",
@@ -61,7 +61,7 @@ SALES_DATA_SCHEMA = {
                 "minimum": 0,
                 "description": "Total number of drivers/truckers who will use the system. Include: full-time vs part-time drivers, seasonal variations, driver turnover rates, technology comfort levels, training requirements, and whether drivers are employees or contractors. This helps CS plan user adoption strategies and training programs."
             },
-            "activities_transport_details": {
+            "activities_notes": {
                 "type": "string",
                 "description": "Specific transportation activities and cargo types handled. Include: types of goods transported, special handling requirements, temperature-controlled shipments, hazardous materials, international vs domestic routes, delivery patterns, customer requirements, and any unique operational needs. This helps CS understand feature requirements and customization needs."
             },
@@ -69,7 +69,7 @@ SALES_DATA_SCHEMA = {
                 "type": "string",
                 "description": "Company's network affiliations and group memberships. Include: pallet networks, industry associations, partner relationships, franchise structures, parent company relationships, and any external dependencies that could affect implementation. Note if they have standardized processes from networks or if they need to maintain compatibility with partner systems."
             },
-            "cross_dock_details": {
+            "cross_dock_notes": {
                 "type": "string",
                 "description": "Cross-docking operations and tracking requirements. Include: cross-dock facility details, volume of cross-docked shipments, tracking label requirements, status update needs at each dock passage, integration with existing systems, and any specific operational workflows. This helps CS understand complex operational requirements and potential integration challenges."
             }
@@ -82,12 +82,12 @@ SALES_DATA_SCHEMA = {
             "decision_maker_lastname",
             "warning_note",
             "current_tms",
-            "start_date_constraints",
+            "mrr_start_date",
             "number_sites_entities",
             "number_truckers",
-            "activities_transport_details",
+            "activities_notes",
             "group_network_details",
-            "cross_dock_details"
+            "cross_dock_notes"
         ],
         "additionalProperties": False
     },
@@ -102,24 +102,24 @@ FIELD_NAME_MAPPING = {
     "decision_maker_lastname": "Decision Maker Last Name",
     "warning_note": "Warnings Note",
     "current_tms": "Current TMS",
-    "start_date_constraints": "Start Date & Constraints",
+    "mrr_start_date": "MRR Start Date",
     "number_sites_entities": "Number of Sites/Entities",
     "number_truckers": "Number of Truckers",
-    "activities_transport_details": "Activities/Transport Details",
+    "activities_notes": "Activities/Transport Details",
     "group_network_details": "Group/Network Details",
-    "cross_dock_details": "Cross Dock Details"
+    "cross_dock_notes": "Cross Dock Details"
 }
 
 SALES_DATA_SCHEMA_TO_COMPANY_HUBSPOT_FIELDS_MAPPING = {
     "company_org_key_people": "company_org___key_people",
     "warning_note": "warning_note",
     "current_tms": "tms",
-    "start_date_constraints": "mrr_start_date",
+    "mrr_start_date": "mrr_start_date",
     "number_sites_entities": "nombre_d_agences",
     "number_truckers": "nom_de_conducteurs_total",
-    "activities_transport_details": "activity_notes",
+    "activities_notes": "activity_notes",
     "group_network_details": "group___network_detail",
-    "cross_dock_details": "cross_dock_notes"
+    "cross_dock_notes": "cross_dock_notes"
 }
 
 SYSTEM_PROMPT = """
@@ -353,12 +353,12 @@ def clear_all_data():
         'field_decision_maker',
         'field_warnings_disclaimers',
         'field_current_tms',
-        'field_start_date_constraints',
+        'field_mrr_start_date',
         'field_number_sites_entities',
         'field_number_truckers',
-        'field_activities_transport_details',
+        'field_activities_notes',
         'field_group_network_details',
-        'field_cross_dock_details'
+        'field_cross_dock_notes'
     ]   
     for key in field_keys_to_clear:
         if key in st.session_state:
@@ -604,14 +604,14 @@ def render_structured_data_form(structured_data, dev_mode=False):
         col1, col2 = st.columns(2)
         
         with col1:
-            create_field_input(FIELD_NAME_MAPPING['start_date_constraints'], 'start_date_constraints', col1, structured_data)
+            create_field_input(FIELD_NAME_MAPPING['mrr_start_date'], 'mrr_start_date', col1, structured_data)
             create_field_input(FIELD_NAME_MAPPING['number_sites_entities'], 'number_sites_entities', col1, structured_data)
             create_field_input(FIELD_NAME_MAPPING['group_network_details'], 'group_network_details', col1, structured_data)
         
         with col2:
             create_field_input(FIELD_NAME_MAPPING['number_truckers'], 'number_truckers', col2, structured_data)
-            create_field_input(FIELD_NAME_MAPPING['activities_transport_details'], 'activities_transport_details', col2, structured_data)
-            create_field_input(FIELD_NAME_MAPPING['cross_dock_details'], 'cross_dock_details', col2, structured_data)
+            create_field_input(FIELD_NAME_MAPPING['activities_notes'], 'activities_notes', col2, structured_data)
+            create_field_input(FIELD_NAME_MAPPING['cross_dock_notes'], 'cross_dock_notes', col2, structured_data)
         
         if dev_mode:
             # Show raw JSON data
@@ -626,7 +626,7 @@ def render_structured_data_form(structured_data, dev_mode=False):
                         hubspot_field = SALES_DATA_SCHEMA_TO_COMPANY_HUBSPOT_FIELDS_MAPPING[key]
                         
                         # Convert date fields to timestamp format for HubSpot
-                        if key == 'start_date_constraints' and value:
+                        if key == 'mrr_start_date' and value:
                             try:
                                 # Convert DD/MM/YYYY to timestamp at midnight UTC for HubSpot
                                 date_obj = datetime.strptime(value, "%d/%m/%Y")
@@ -635,7 +635,7 @@ def render_structured_data_form(structured_data, dev_mode=False):
                                 timestamp_ms = int(midnight_utc.timestamp() * 1000)
                                 data_to_send[hubspot_field] = timestamp_ms
                             except ValueError:
-                                print(f"⚠️ Invalid date format for start_date_constraints: {value}")
+                                print(f"⚠️ Invalid date format for mrr_start_date: {value}")
                                 data_to_send[hubspot_field] = value
                         else:
                             data_to_send[hubspot_field] = value
