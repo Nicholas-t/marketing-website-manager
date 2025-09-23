@@ -3,12 +3,13 @@ import os
 import tempfile
 import json
 import hashlib
+from datetime import datetime, timezone
 from openai import OpenAI
-from utils.hubspot import get_hubspot_company_data, send_company_data_to_hubspot
+from utils.hubspot import get_hubspot_company_data, send_company_data_to_hubspot, get_tms_list_for_field, create_contact_in_hubspot, associate_contact_to_company
 # Initialize OpenAI client
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-
+TMS_LIST = [""] + get_tms_list_for_field()
 
 # OpenAI Structured Output JSON Schema for sales data extraction
 SALES_DATA_SCHEMA = {
@@ -18,56 +19,68 @@ SALES_DATA_SCHEMA = {
         "properties": {
             "company_org_key_people": {
                 "type": "string",
-                "description": "Company organization and key people information"
+                "description": "Company organizational structure and key stakeholders. Include: decision makers, project sponsors, technical contacts, operations managers, finance contacts, and their roles/responsibilities. Note reporting structures, who has budget authority, who will be day-to-day users, and any internal politics or dynamics that could impact implementation success."
             },
-            "project_manager": {
-                "type": "string", 
-                "description": "Project manager details"
-            },
-            "decision_maker": {
+            "project_manager_firstname": {
                 "type": "string",
-                "description": "Decision maker information"
+                "description": "Project manager first name"
             },
-            "warnings_disclaimers": {
+            "project_manager_lastname": {
                 "type": "string",
-                "description": "Any warnings or disclaimers about behavior or organization"
+                "description": "Project manager last name"
+            },
+            "decision_maker_firstname": {
+                "type": "string",
+                "description": "Decision maker first name"
+            },
+            "decision_maker_lastname": {
+                "type": "string",
+                "description": "Decision maker last name"
+            },
+            "warning_note": {
+                "type": "string",
+                "description": "Critical warnings, red flags, or risk factors that Customer Success should be aware of. Include: difficult personalities, previous implementation failures, budget constraints, timeline pressures, internal resistance, compliance issues, technical limitations, or any behavioral patterns that could impact project success. This helps CS prepare appropriate strategies and expectations."
             },
             "current_tms": {
                 "type": "string",
-                "description": "Current TMS (Transport Management System)"
+                "description": "Current Transport Management System in use. Include: system name, version, how long they've used it, satisfaction level, specific pain points, integration capabilities, data migration challenges, and why they're looking to change. This helps CS understand technical migration complexity and potential integration requirements.",
+                "enum": TMS_LIST,
             },
             "start_date_constraints": {
                 "type": "string",
-                "description": "Start date of the project and any constraints or conditions"
+                "description": "Project timeline and implementation constraints. Include: desired start date, hard deadlines, seasonal business patterns, budget cycles, regulatory compliance dates, contract renewals, or any time-sensitive factors. Note if there are flexibility windows or if dates are negotiable. This helps CS plan realistic implementation schedules. THE FORMAT MUST BE DD/MM/YYYY",
+                "pattern": "^(0[1-9]|[12][0-9]|3[01])/(0[1-9]|1[0-2])/\\d{4}$",
             },
             "number_sites_entities": {
                 "type": "integer",
                 "minimum": 0,
-                "description": "Number of sites/entities"
+                "description": "Total number of physical locations, warehouses, distribution centers, or business entities that will be involved in the implementation. Include details about geographic distribution, operational differences between sites, and whether all sites need to go live simultaneously or can be phased. This impacts implementation complexity and resource planning."
             },
             "number_truckers": {
                 "type": "integer",
                 "minimum": 0,
-                "description": "How many truckers"
+                "description": "Total number of drivers/truckers who will use the system. Include: full-time vs part-time drivers, seasonal variations, driver turnover rates, technology comfort levels, training requirements, and whether drivers are employees or contractors. This helps CS plan user adoption strategies and training programs."
             },
             "activities_transport_details": {
                 "type": "string",
-                "description": "Activities they do (not the business sector, exactly what they transport)"
+                "description": "Specific transportation activities and cargo types handled. Include: types of goods transported, special handling requirements, temperature-controlled shipments, hazardous materials, international vs domestic routes, delivery patterns, customer requirements, and any unique operational needs. This helps CS understand feature requirements and customization needs."
             },
             "group_network_details": {
                 "type": "string",
-                "description": "Part of a group? Member of a pallet network? Local influencer and other network details"
+                "description": "Company's network affiliations and group memberships. Include: pallet networks, industry associations, partner relationships, franchise structures, parent company relationships, and any external dependencies that could affect implementation. Note if they have standardized processes from networks or if they need to maintain compatibility with partner systems."
             },
             "cross_dock_details": {
                 "type": "string",
-                "description": "Cross dock functionality? Edition d'étiquettes de suivi? Suivi des statuts à chaque passage à quai?"
+                "description": "Cross-docking operations and tracking requirements. Include: cross-dock facility details, volume of cross-docked shipments, tracking label requirements, status update needs at each dock passage, integration with existing systems, and any specific operational workflows. This helps CS understand complex operational requirements and potential integration challenges."
             }
         },
         "required": [
             "company_org_key_people",
-            "project_manager", 
-            "decision_maker",
-            "warnings_disclaimers",
+            "project_manager_firstname",
+            "project_manager_lastname",
+            "decision_maker_firstname",
+            "decision_maker_lastname",
+            "warning_note",
             "current_tms",
             "start_date_constraints",
             "number_sites_entities",
@@ -83,9 +96,11 @@ SALES_DATA_SCHEMA = {
 
 FIELD_NAME_MAPPING = {
     "company_org_key_people": "Company Org & Key People",
-    "project_manager": "Project Manager",
-    "decision_maker": "Decision Maker",
-    "warnings_disclaimers": "Warnings/Disclaimers",
+    "project_manager_firstname": "Project Manager First Name",
+    "project_manager_lastname": "Project Manager Last Name",
+    "decision_maker_firstname": "Decision Maker First Name",
+    "decision_maker_lastname": "Decision Maker Last Name",
+    "warning_note": "Warnings Note",
     "current_tms": "Current TMS",
     "start_date_constraints": "Start Date & Constraints",
     "number_sites_entities": "Number of Sites/Entities",
@@ -95,27 +110,25 @@ FIELD_NAME_MAPPING = {
     "cross_dock_details": "Cross Dock Details"
 }
 
-SALES_DATA_SCHEMA_TO_HUBSPOT_FIELDS_MAPPING = {
-    "company_org_key_people": "company_org_key_people",
-    "project_manager": "project_manager",
-    "decision_maker": "decision_maker",
-    "warnings_disclaimers": "warnings_disclaimers",
-    "current_tms": "current_tms",
-    "start_date_constraints": "start_date_constraints",
-    "number_sites_entities": "number_sites_entities",
-    "number_truckers": "number_truckers",
-    "activities_transport_details": "activities_transport_details",
-    "group_network_details": "group_network_details",
-    "cross_dock_details": "cross_dock_details"
+SALES_DATA_SCHEMA_TO_COMPANY_HUBSPOT_FIELDS_MAPPING = {
+    "company_org_key_people": "company_org___key_people",
+    "warning_note": "warning_note",
+    "current_tms": "tms",
+    "start_date_constraints": "mrr_start_date",
+    "number_sites_entities": "nombre_d_agences",
+    "number_truckers": "nom_de_conducteurs_total",
+    "activities_transport_details": "activity_notes",
+    "group_network_details": "group___network_detail",
+    "cross_dock_details": "cross_dock_notes"
 }
 
 SYSTEM_PROMPT = """
 You are an expert sales assistant that extracts structured information from sales conversations and notes.
-Your task is to analyze the transcript and fill in the fields of the schema with the most relevant information.
+Your task is to analyze the transcript and fill in the fields of the schema with the most relevant information for the Customer Success team.
 
 Instructions:
 
-Output only the value for each field (no extra phrasing like “The X is…”).
+Output only the value for each field (no extra phrasing like "The X is…").
 
 If multiple values apply, list them separated by commas.
 
@@ -124,6 +137,16 @@ If information is missing, leave the field empty.
 Do not add explanations, assumptions, or commentary outside the schema.
 
 Maintain the exact field names from the schema.
+
+Focus on capturing information that will help Customer Success:
+- Understand implementation complexity and risks
+- Plan appropriate onboarding strategies
+- Identify potential challenges and mitigation strategies
+- Prepare for technical requirements and integrations
+- Understand organizational dynamics and decision-making processes
+- Plan realistic timelines and resource allocation
+
+CONTEXT: TODAY IS {TODAY_DATE}
 """
 
 def transcribe_audio(audio_file):
@@ -171,13 +194,30 @@ def get_ai_response(messages):
         st.error(f"Error getting AI response: {str(e)}")
         return None
 
-def extract_structured_data(transcript):
+def extract_structured_data(transcript, existing_data=None):
     """Extract structured sales data from transcript using OpenAI Structured Outputs"""
     try:
+        # Build context about existing data
+        existing_context = ""
+        if existing_data:
+            existing_context = f"""
+
+CURRENT ACCUMULATED DATA:
+{json.dumps(existing_data, indent=2)}
+
+IMPORTANT: Use the current data as a baseline and only update fields with NEW information from the transcript. 
+- If a field already has meaningful data, only update it if the transcript provides MORE SPECIFIC or CORRECTED information
+- If a field is empty or contains placeholder values, fill it with relevant information from the transcript
+- Preserve existing data unless the transcript explicitly contradicts or provides better information
+- For numeric fields, only update if the transcript provides a specific number (don't overwrite with 0 unless explicitly mentioned)
+- For the 'current_tms' field: Only update if the transcript explicitly mentions a specific TMS system name. If no TMS is mentioned or the mention is unclear, leave the field empty to preserve existing data.
+- Available TMS options: {', '.join(TMS_LIST[:10])}{'...' if len(TMS_LIST) > 10 else ''}
+"""
+
         messages = [
             {
                 "role": "system", 
-                "content": SYSTEM_PROMPT.strip()
+                "content": SYSTEM_PROMPT.strip().format(TODAY_DATE=datetime.now().strftime("%Y-%m-%d")) + existing_context
             },
             {
                 "role": "user", 
@@ -209,7 +249,9 @@ def is_field_empty(value):
     if isinstance(value, str):
         return not value or not value.strip()
     if isinstance(value, (int, float)):
-        return value <= 0  # Zero and negative numbers considered invalid for these fields
+        # For integer fields, only consider negative numbers as invalid
+        # 0 is a valid value that should not be considered empty
+        return value <= 0
     return False
 
 
@@ -227,13 +269,31 @@ def merge_structured_data(existing_data, new_data):
         if isinstance(value, str):
             return not value.strip() or value.strip().lower() in ['not mentioned', 'n/a', 'none', '']
         if isinstance(value, (int, float)):
-            return value < 0  # Negative numbers considered invalid
+            # For integer fields, only consider negative numbers as invalid
+            # 0 is a valid value that should be preserved
+            return value < 0
         return False
     
+    def is_valid_tms_value(value):
+        """Check if TMS value is valid (exists in TMS_LIST)"""
+        if not value or not isinstance(value, str):
+            return False
+        return value.strip() in TMS_LIST
+    
     for key, value in new_data.items():
-        # Update field if new value is not empty
-        if not is_empty_value(value):
-            merged_data[key] = value
+        # Special handling for TMS field
+        if key == 'current_tms':
+            # Only update TMS if the new value is valid and not empty
+            if is_valid_tms_value(value) and not is_empty_value(value):
+                merged_data[key] = value
+            # If existing TMS is valid, preserve it even if new value is empty/invalid
+            elif is_valid_tms_value(existing_data.get(key)):
+                # Keep existing value, don't overwrite with empty/invalid
+                pass
+        else:
+            # Update field if new value is not empty
+            if not is_empty_value(value):
+                merged_data[key] = value
     
     return merged_data
 
@@ -254,6 +314,24 @@ def generate_summary(transcript):
         st.error(f"Error generating summary: {str(e)}")
         return None
 
+
+def initialize_empty_structured_data():
+    """Initialize all structured data fields to empty values"""
+    all_required_fields = SALES_DATA_SCHEMA.get("schema").get("properties").keys()
+    empty_data = {}
+    
+    for field in all_required_fields:
+        field_properties = SALES_DATA_SCHEMA.get("schema").get("properties").get(field)
+        field_type = field_properties.get("type")
+        
+        if field_type == "integer":
+            empty_data[field] = 0
+        elif field_type == "string":
+            empty_data[field] = ""
+        else:
+            empty_data[field] = ""
+    
+    return empty_data
 
 def clear_all_data():
     """Clear all accumulated data from session state"""
@@ -286,6 +364,9 @@ def clear_all_data():
         if key in st.session_state:
             del st.session_state[key]
     
+    # Initialize empty structured data
+    st.session_state.accumulated_structured_data = initialize_empty_structured_data()
+    
     st.success("All data cleared! You can start fresh.")
     st.rerun()
 
@@ -308,7 +389,7 @@ def render_app_header(hubspot_id=None):
                 st.markdown(f"[View in HubSpot](https://app.hubspot.com/contacts/9184177/record/0-2/{hubspot_id_input})")
             with col22:
                 company_data = get_hubspot_company_data(hubspot_id_input)
-                company_name = company_data.get('properties', {}).get('name', {}).get('value')
+                company_name = company_data.get('properties', {}).get('name', "")
                 st.success(f"🏢 {company_name}")
                 st.session_state.hubspot_company_id = hubspot_id_input
                 st.session_state.hubspot_company_name = company_name
@@ -347,7 +428,7 @@ def render_instructions():
         """)
 
 
-def process_audio_input(audio_bytes):
+def process_audio_input(audio_bytes, dev_mode=False):
     """Process audio input and update session state with results"""
     if not audio_bytes:
         return
@@ -390,16 +471,21 @@ def process_audio_input(audio_bytes):
         
         # Extract and merge structured data
         with st.spinner("🔍 Extracting data..."):
-            new_structured_data = extract_structured_data(transcript)
+            existing_data = st.session_state.get('accumulated_structured_data', {})
+            new_structured_data = extract_structured_data(transcript, existing_data)
             if new_structured_data:
-                existing_data = st.session_state.get('accumulated_structured_data', {})
+                # Debug: Show what's being merged (can be enabled for debugging)
+                if dev_mode:
+                    st.write("🔍 Debug - Existing TMS:", existing_data.get('current_tms', 'None'))
+                    st.write("🔍 Debug - New TMS:", new_structured_data.get('current_tms', 'None'))
+                
                 st.session_state.accumulated_structured_data = merge_structured_data(existing_data, new_structured_data)
                 st.success("✅ Audio automatically processed, summary updated!")
             else:
                 st.error("❌ Failed to extract structured data")
 
 
-def render_audio_input_section():
+def render_audio_input_section(dev_mode=False):
     """Render the audio input and processing section"""
     st.subheader("🎤 Record Notes")
     
@@ -412,10 +498,10 @@ def render_audio_input_section():
     audio_bytes = st.audio_input("Record your notes or conversation")
     
     # Process audio if provided
-    process_audio_input(audio_bytes)
+    process_audio_input(audio_bytes, dev_mode)
 
 
-def create_field_input(label, key, col_obj, structured_data):
+def create_field_input(label, key, col_obj, structured_data, optional=False):
     """Create input field with warning styling for empty fields"""
     value = structured_data.get(key, '')
     is_empty = is_field_empty(value)
@@ -442,7 +528,7 @@ def create_field_input(label, key, col_obj, structured_data):
             default_value = int(input_value)
         
         new_value = col_obj.number_input(
-            label if not is_empty else f"⚠️ {label}",
+            label if not is_empty or optional else f"⚠️ {label}",
             value=default_value,
             min_value=0,
             key=f"field_{key}",
@@ -456,7 +542,7 @@ def create_field_input(label, key, col_obj, structured_data):
     else:
         # Handle text fields
         new_value = col_obj.text_area(
-            label if not is_empty else f"⚠️ {label}",
+            label if not is_empty or optional else f"⚠️ {label}",
             value=input_value,
             height=100,
             key=f"field_{key}",
@@ -487,40 +573,44 @@ def render_structured_data_form(structured_data, dev_mode=False):
     with st.expander("View accumulated structured data", expanded=True):
         # Organization section
         st.markdown("### 👥 ORG")
+        st.markdown("#### Decision Maker")
         col1, col2 = st.columns(2)
+        with col1:
+            create_field_input("First Name", 'decision_maker_firstname', col1, structured_data)
+        with col2:
+            create_field_input("Decision Maker Last Name", 'decision_maker_lastname', col2, structured_data)
+       
+        st.markdown("#### Project Manager")
+        col1, col2 = st.columns(2)
+        with col1:
+            create_field_input("First Name", 'project_manager_firstname', col1, structured_data)
+        with col2:
+            create_field_input("Last Name", 'project_manager_lastname', col2, structured_data)
         
+        st.markdown("#### Company Org & Key People")
+        col1, col2 = st.columns(2)
         with col1:
             create_field_input("Company Org & Key People", 'company_org_key_people', col1, structured_data)
-            create_field_input("Project Manager", 'project_manager', col1, structured_data)
-        
         with col2:
-            create_field_input("Decision Maker", 'decision_maker', col2, structured_data)
             create_field_input("Warnings/Disclaimers", 'warnings_disclaimers', col2, structured_data)
         
+       
         # Stack section
         st.markdown("### ⚙️ STACK")
         create_field_input("Current TMS", 'current_tms', st, structured_data)
         
         # Project size/complexity section
-        st.markdown("### 📏 PROJECT SIZE / COMPLEXITY")
+        st.markdown("### 📏 PROJECT SIZE / CONTEXT")
         col1, col2 = st.columns(2)
         
         with col1:
             create_field_input("Start Date & Constraints", 'start_date_constraints', col1, structured_data)
             create_field_input("Number of Sites/Entities", 'number_sites_entities', col1, structured_data)
+            create_field_input("Group/Network Details", 'group_network_details', col1, structured_data)
         
         with col2:
             create_field_input("Number of Truckers", 'number_truckers', col2, structured_data)
             create_field_input("Activities/Transport Details", 'activities_transport_details', col2, structured_data)
-        
-        # LTL section
-        st.markdown("### 📦 LTL")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            create_field_input("Group/Network Details", 'group_network_details', col1, structured_data)
-        
-        with col2:
             create_field_input("Cross Dock Details", 'cross_dock_details', col2, structured_data)
         
         if dev_mode:
@@ -532,24 +622,68 @@ def render_structured_data_form(structured_data, dev_mode=False):
             if st.button("Save notes to HubSpot"):
                 data_to_send = {}
                 for key, value in st.session_state.accumulated_structured_data.items():
-                    data_to_send[SALES_DATA_SCHEMA_TO_HUBSPOT_FIELDS_MAPPING[key]] = value
+                    if key in SALES_DATA_SCHEMA_TO_COMPANY_HUBSPOT_FIELDS_MAPPING:
+                        hubspot_field = SALES_DATA_SCHEMA_TO_COMPANY_HUBSPOT_FIELDS_MAPPING[key]
+                        
+                        # Convert date fields to timestamp format for HubSpot
+                        if key == 'start_date_constraints' and value:
+                            try:
+                                # Convert DD/MM/YYYY to timestamp at midnight UTC for HubSpot
+                                date_obj = datetime.strptime(value, "%d/%m/%Y")
+                                # Create timezone-aware datetime at midnight UTC
+                                midnight_utc = datetime.combine(date_obj.date(), datetime.min.time(), timezone.utc)
+                                timestamp_ms = int(midnight_utc.timestamp() * 1000)
+                                data_to_send[hubspot_field] = timestamp_ms
+                            except ValueError:
+                                print(f"⚠️ Invalid date format for start_date_constraints: {value}")
+                                data_to_send[hubspot_field] = value
+                        else:
+                            data_to_send[hubspot_field] = value
                 try:
                     # Send company data to HubSpot
-                    # send_company_data_to_hubspot(st.session_state.hubspot_company_id, data_to_send)
+                    send_company_data_to_hubspot(st.session_state.hubspot_company_id, data_to_send)
                     st.success("✅ Company data sent to HubSpot")
                 except Exception as e:
                     st.error(f"❌ Error sending company data to HubSpot: {str(e)}")
-
+                try:
+                    if structured_data.get("project_manager_firstname") and structured_data.get("project_manager_lastname"):
+                        project_manager_data = {
+                            "firstname": structured_data.get("project_manager_firstname"),
+                            "lastname": structured_data.get("project_manager_lastname"),
+                            "hs_buying_role": "Project manager"
+                        }
+                        # Send contact data to HubSpot
+                        project_manager_hs_contact = create_contact_in_hubspot(project_manager_data)
+                        associate_contact_to_company(project_manager_hs_contact["id"], st.session_state.hubspot_company_id)
+                        st.success("✅ Project Manager data sent to HubSpot")
+                    else:
+                        st.warning("❌ Project Manager data not sent to HubSpot (Missing information)")
+                except Exception as e:
+                    st.error(f"❌ Error sending project manager data to HubSpot: {str(e)}")
+                try:
+                    if structured_data.get("decision_maker_firstname") and structured_data.get("decision_maker_lastname"):
+                        decision_maker_data = {
+                            "firstname": structured_data.get("decision_maker_firstname"),
+                            "lastname": structured_data.get("decision_maker_lastname"),
+                            "hs_buying_role": "DECISION_MAKER"
+                        }
+                        # Send contact data to HubSpot
+                        decision_maker_hs_contact = create_contact_in_hubspot(decision_maker_data)
+                        associate_contact_to_company(decision_maker_hs_contact["id"], st.session_state.hubspot_company_id)
+                        st.success("✅ Decision Maker data sent to HubSpot")
+                    else:
+                        st.warning("❌ Decision Maker data not sent to HubSpot (Missing information)")
+                except Exception as e:
+                    st.error(f"❌ Error sending decision maker data to HubSpot: {str(e)}")
 
 def render_sales_notes_data_tab(dev_mode=False):
     """Render the sales notes data tab"""
     st.subheader("📝 Sales Notes Data")
     
     structured_data = st.session_state.get('accumulated_structured_data', {})
-    
-    if structured_data:
-        render_data_completion_status(structured_data)
-        render_structured_data_form(structured_data, dev_mode)
+    # Always render the form, even if data is empty (initialized)
+    render_data_completion_status(structured_data)
+    render_structured_data_form(structured_data, dev_mode)
 
 def get_human_readable_field_name(field_key):
     """Convert field keys to human-readable names"""
@@ -636,6 +770,10 @@ def render_data_display_tabs(dev_mode=False):
 
 def post_sales_notes_app(dev_mode=False, hs_id=None):
     """Main application function - orchestrates all components"""
+    # Initialize empty structured data if not already present
+    if 'accumulated_structured_data' not in st.session_state:
+        st.session_state.accumulated_structured_data = initialize_empty_structured_data()
+    
     # Render header and get HubSpot ID
     render_app_header(hs_id)
     
@@ -646,7 +784,7 @@ def post_sales_notes_app(dev_mode=False, hs_id=None):
     col3, col4 = st.columns([1, 1])
     
     with col3:
-        render_audio_input_section()
+        render_audio_input_section(dev_mode)
         render_checklist_section()
     with col4:
         render_data_display_tabs(dev_mode)

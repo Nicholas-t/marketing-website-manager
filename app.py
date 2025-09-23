@@ -32,7 +32,7 @@ hs_id = None
 if query_params.get("page") == "sales-post-meeting-notes" or "sales-post-meeting-notes" in str(query_params):
     app_to_open = "Sales - Post Sales Notes"
     hs_id = query_params.get("hs_id")
-    print(hs_id)
+
 # Reorder APPS_LIST so that app_to_open appears first
 if app_to_open and app_to_open in APPS_LIST:
     reordered_apps_list = [app_to_open] + [app for app in APPS_LIST if app != app_to_open]
