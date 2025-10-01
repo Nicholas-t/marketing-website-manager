@@ -768,7 +768,7 @@ def render_data_display_tabs(dev_mode=False):
         render_transcript_summary_tab()
 
 
-def post_sales_notes_app(dev_mode=False, hs_id=None):
+def post_sales_recap_app(dev_mode=False, hs_id=None):
     """Main application function - orchestrates all components"""
     # Initialize empty structured data if not already present
     if 'accumulated_structured_data' not in st.session_state:

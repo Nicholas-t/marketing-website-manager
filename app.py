@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from utils.storyblok import fetch_all_stories
 from utils.plausible import get_page_visits_custom_date_range
 from apps.page_language_grouping_app import page_language_grouping_app
-from apps.post_sales_notes_app import post_sales_notes_app
+from apps.post_sales_recap_app import post_sales_recap_app
 
 if os.path.exists('style.css'):
     with open('style.css', 'r', encoding='utf-8') as f:
@@ -21,7 +21,7 @@ st.set_page_config(
 
 APPS_LIST = [
     "Marketing - Page Language Grouping",
-    "Sales - Post Sales Notes",
+    "Sales - Post Sales Recap",
 ]
 
 # Check URL parameters for direct routing
@@ -29,8 +29,8 @@ query_params = st.query_params
 app_to_open = None
 hs_id = None
 # Check for direct URL routing - support both page parameter and direct URL paths
-if query_params.get("page") == "sales-post-meeting-notes" or "sales-post-meeting-notes" in str(query_params):
-    app_to_open = "Sales - Post Sales Notes"
+if query_params.get("page") == "post-sales-recap" or "post-sales-recap" in str(query_params):
+    app_to_open = "Sales - Post Sales Recap"
     hs_id = query_params.get("hs_id")
 
 # Reorder APPS_LIST so that app_to_open appears first
@@ -69,8 +69,8 @@ def main():
         analytics = get_page_visits_custom_date_range(start_date=start_date, end_date=end_date)
         stories = fetch_all_stories(test=DEV_MODE)
         page_language_grouping_app(stories, analytics, dev_mode=DEV_MODE)
-    elif app_selection == "Sales - Post Sales Notes":
-        post_sales_notes_app(dev_mode=DEV_MODE, hs_id=hs_id)
+    elif app_selection == "Sales - Post Sales Recap":
+        post_sales_recap_app(dev_mode=DEV_MODE, hs_id=hs_id)
 if __name__ == "__main__":
     if ENV == "dev":
         main()
